@@ -1,0 +1,337 @@
+---
+title: "Using interaction data in video game to analyze the relation between reflex, age, and skill level"
+author: "Joseph Yan"
+date: "2022/12/18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(car)
+Cleaned <- read_csv("Skill_cleaned.csv")
+```
+
+
+```{r echo=F}
+# set seed and split data
+set.seed(214)
+s <- sample(1:3333, 1667, replace=F)
+
+train <- Cleaned[s, ]
+test <- Cleaned[-s,]
+
+# write.csv(train, file="train.csv")
+```
+
+```{r, echo=F}
+# find mean of variables
+means_train <- apply(train[,-c(1,2)], 2, mean)
+means_test <- apply(test[,-c(1,2)], 2, mean)
+
+# find sd of variables
+sds_train <- apply(train[,-c(1,2)], 2, sd)
+sds_test <- apply(test[,-c(1,2)], 2, sd)
+```
+# Introduction
+Behaviour in video games is a relatively underresearched field of study compared to many other forms of media. However, as artificial intelligence becomes more prevalent in everyday life, video games have become one of the most effective sources for observing human behaviour. This Report aims to present a linear regression model that can explain the relationship between an individual's age, reflex and skill level in a competitive video game environment, using match data collected across 3395 players ranging from various ages, ranks, and playtime. In order to do so, we will investigate what variables are predictive for our model and how much of an impact they hold on a player's performance. 
+
+This research area is still relatively niche due to the field being a fresh cross-section of multiple disciplines. Most of them, like groups from Deepmind (Vinyals, 2019), either focus on using research data to push the boundaries of artificial intelligence or analyze the human decision system from a biosqrtical standpoint(Thompson JJ, 2013). In our study, we want to use the constructed model to help train AIs that can more closely imitate human actions. Furthermore, we also want to provide estimations for players who wish to keep track of their improvements and compare them with other players' statistics in the same skill bracket. Compared to the previous two examples of research in the field, this study seeks to explore the middle ground and the gap between AI and human interactions.
+
+# Materials and Methods
+## Data Collection
+
+The Data set used in this study was collected by SFU Cognitive Science Lab and archived by UCI Machine Learning Repository. A few attributes of the data to be noted include the following:  
+
+-- LeagueIndex: Bronze, Silver, Gold, Platinum, Diamond, Master, GrandMaster(1-7 respectively), indicates expertise of the game.  
+
+-- Screen movements are aggregated into screen fixations using a Salvucci & Goldberg dispersion-threshold algorithm and defined Perception-Action Cycles (PACs) as fixations with at least one action.  
+
+-- Perception-Action Cycles are defined as a period of time when players are fixating and acting at a particular location.  
+
+-- Time is recorded in terms of timestamps in the StarCraft 2 replay file. When the game is played on 'faster', one real-time second equals roughly 88.5 timestamps.  
+
+-- Hotkeys are keyboard inputs that can replace clicking or combinations of interaction with the screen using the mouse, thus increasing potential actions a player can execute in a given timeframe.  
+
+-- Action Per Minute(APM) is a measurement of cognitive-motor speed and is often used as a predictor of expertise in the game's community. (Thompson, 2013)  
+
+Other than that, as per the original study's data collection process, all games are played under the same client version and thus are within a controlled timeframe. Each match data is entirely independent of another. We have cleaned undetermined and missing values and removed some variables from the original data set that do not apply to the study to better fit our goal's needs in constructing the linear model. Such entries mainly include professional players whose data are vastly different from regular players causing problematic evaluations.  
+## Methods
+The main question to discuss is the predictive importance of variables to the linear model. To answer this, we first evenly split the data set into training and testing sets. Each included 1668 observations and is compared to ensure the two sets have similar characteristics.[Table 1] Afterwards, we built a linear regression model with all the variables from our cleaned data set. 
+
+
+Variable | Training Set | Test Set
+---------|--------------|--------------
+HrsPerWeek | `r means_train[1] ` (`r sds_train[1]`) | `r means_test[1]` (`r sds_test[1]`)
+TotalHours | `r means_train[2]` (`r sds_train[2]`) | `r means_test[2]` (`r sds_test[2]`)
+APM | `r means_train[3]` (`r sds_train[3]`)| `r means_test[3]` (`r sds_test[3]`)
+UniqueHotkeys | `r means_train[4]` (`r sds_train[4]`) | `r means_test[4]` (`r sds_test[4]`)
+NumberOfPACs | `r means_train[5]` (`r sds_train[5]`) | `r means_test[5]` (`r sds_test[5]`)
+GapBetweenPACs(ms) | `r means_train[6]` (`r sds_train[6]`) | `r means_test[6]` (`r sds_test[6]`)
+ActionLatency(ms) | `r means_train[7]` (`r sds_train[7]`) | `r means_test[7]` (`r sds_test[7]`)
+ActionsInPAC | `r means_train[8]` (`r sds_train[8]`) | `r means_test[8]` (`r sds_test[8]`)
+UniqueUnitsMade | `r means_train[9]` (`r sds_train[9]`) | `r means_test[9]` (`r sds_test[9]`)
+
+Table: Summary statistics of each variable in the training and test datasets, each of size 1668. All values are summarized in means(s.d). From the table we can see that the two data sets hold similar values.
+
+## Methods
+The main question to discuss is the predictive importance of variables to the linear model. To answer this, we first evenly split the data set into training and testing sets. Each included 1668 observations and is compared to ensure the two sets have similar characteristics. Afterwards, we built a linear regression model with all the variables from our cleaned data set. 
+
+We then proposed our hypothesis that the regression model containing at least one predictor useful in predicting our response variable.
+That is:
+$$ 
+\begin{aligned}
+H_0: \beta_1 = \beta_2 = \beta_3 = \beta_4 = \beta_5 = \beta_6 = \beta_7 = \beta_8 = \beta_9 = \beta_{10} = 0 \\
+H_A: \text{At least one }\beta_j \neq 0 \text{ (for j = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)}
+\end{aligned}
+$$
+```{r echo=F, message=F, results='hide'}
+# Construct First model
+model_1 <- lm(LeagueIndex ~ Age + HoursPerWeek + TotalHours + APM + UniqueHotkeys + NumberOfPACs
+              + GapBetweenPACs + ActionLatency + ActionsInPAC + UniqueUnitsMade, data=train)
+vif(model_1)
+summary(model_1)
+```
+
+```{r echo=F, message=F, results='hide'}
+#Perform ANOVA Test
+anova(model_1)
+```
+After Hypothesis testing, we found a significant linear relationship between the response and at least one of the predictors present. Thus we reject the null hypothesis.[Figure 1] Then we conducted an ANOVA test to confirm which variables should be dropped. We decided to drop two variables, ActionsInPAC and UniqueUnitsMade, then used the remaining variables to build a reduced model. After an exploratory analysis, we discovered that most variables do not violate assumptions and linearity holds.[] However, a few variables have a heavy right skew in Age and hours-related variables.  
+
+
+```{r echo=F,fig.height=5, fig.width=8, fig.cap="Residual plots for assessing assumptions of the original model"}
+# Start by extracting the design matrix from the model so we have all the X's
+Xori <- model.matrix(model_1)
+
+# Find residuals of our model
+rori <- model_1$residuals
+
+# Create plot grid
+par(mfrow=c(3,4))
+plot(rori ~ model_1$fitted.values,main="Residuals vs Fitted Values", xlab="Fitted Values", ylab="Residuals")
+for(i in 2:11){
+plot(rori ~ Xori[,i], xlab=colnames(Xori)[i], ylab="Residuals")
+}
+
+# Add the normal QQ plot
+qqnorm(rori)
+qqline(rori)
+```
+
+
+This is expected as a limitation in data collection. We used log transformation to correct the skewness of Age. As for the two-hour variables, we chose square root transformation to avoid any values of 0 becoming negative infinity under log transformation.
+
+Besides the two variables, our plot shows that the linearity, independence of errors, homoscedasticity, and normality of error distribution assumptions and conditions are all within an acceptable range.  
+
+
+```{r echo=F, message=F, results='hide'}
+# Remove insignificant predictor variables from previous test
+model_reduced <-lm(LeagueIndex ~ Age + HoursPerWeek + TotalHours + APM + UniqueHotkeys + NumberOfPACs
+              + GapBetweenPACs + ActionLatency, data=train)
+anova(model_reduced, model_1)
+vif(model_reduced)
+summary(model_reduced)
+```
+
+```{r echo=F, message=F, results='hide', fig.show='hide'}
+# perform transformation
+transform <- powerTransform(model_reduced)
+summary(transform)
+
+train$logAge <- log(train$Age)
+train$sqrtHoursPerWeek <- sqrt(train$HoursPerWeek)
+train$sqrtTotalHours <- sqrt(train$TotalHours)
+
+test$logAge <- log(test$Age)
+test$sqrtHoursPerWeek <- sqrt(test$HoursPerWeek)
+test$sqrtTotalHours <- sqrt(test$TotalHours)
+
+model_transformed <- lm(LeagueIndex ~ logAge + sqrtHoursPerWeek + sqrtTotalHours + APM + UniqueHotkeys + NumberOfPACs
+                + GapBetweenPACs + ActionLatency,data=train)
+anova(model_transformed)
+vif(model_transformed)
+summary(model_transformed)
+
+# recheck conditions
+fit <- model_transformed$fitted.values
+plot(train$LeagueIndex ~ fit)
+abline(a = 0, b = 1)
+lines(lowess(train$LeagueIndex ~ fit), lty=2)
+```
+
+There are a few leverage points but no outstanding outliers in the variables that require transformation. After the transformation, no observations were identified as being influential on the entire regression surface, according to Cook's distance. However, 84 points are identified as influential according to DFFITS, but only 2 by DFBETAS. In our plots, we can observe only a few of them, making them likely only to be influential on their respective predictor variable. There are no entries that are overly common through beta comparisons. Lastly, the QQ plots before and after the transformation look linear without any significant upward or downward trailing on the two edges[Figure 2]. This linearity is partly due to this data set's large observation count.  
+
+
+```{r echo=F,fig.height=5, fig.width=8, fig.cap="Residual plots for assessing assumptions of the transformed model"}
+par(mfrow=c(3,4))
+rtransformed <- model_transformed$residuals
+plot(rtransformed ~ fit, main="Residuals vs Fitted Values", xlab="Fitted", ylab="Residuals")
+plot(rtransformed ~ train$logAge, xlab="Log(Age)", ylab="Residuals")
+plot(rtransformed ~ train$sqrtHoursPerWeek, xlab="SquareRoot(HoursPerWeek)", ylab="Residuals")
+plot(rtransformed ~ train$sqrtTotalHours, xlab="SquareRoot(TotalHours)", ylab="Residuals")
+plot(rtransformed ~ train$APM, xlab="APM", ylab="Residuals")
+plot(rtransformed ~ train$UniqueHotkeys, xlab="UniqueHotKeys", ylab="Residuals")
+plot(rtransformed ~ train$NumberOfPACs, xlab="NumberOfPACs", ylab="Residuals")
+plot(rtransformed ~ train$GapBetweenPACs, xlab="GapBetweenPACs", ylab="Residuals")
+plot(rtransformed ~ train$ActionLatency, xlab="ActionLatency", ylab="Residuals")
+qqnorm(rtransformed)
+qqline(rtransformed)
+```
+
+
+Finally, we assessed the three models with AIC and BIC and made a table to showcase their change as we operated on the models. Our Final model ended up with 0.5402 adjusted R squared, meaning it explains approximately 54% of the original variation in LeagueIndex, increasing from 52%. The AIC and BIC scores are -56.3692 and 1.8186, respectively.[Table 2]
+
+```{r echo=F, message=F, results='hide'}
+# values to use in cutoffs
+n <- nrow(train)
+p <- length(coef(model_transformed))-1
+
+# define the cutoffs we will use
+Hcut <- 2*((p+1)/n)
+DFFITScut <- 2*sqrt((p+1)/n)
+DFBETAcut <- 2/sqrt(n)
+Dcut <- qf(0.5, p+1, n-p-1)
+
+# identify the leverage points
+h <- hatvalues(model_transformed)
+which(h>Hcut)
+
+# identify the outliers
+r <- rstandard(model_transformed)
+which(r < -2 | r > 2)
+which(r < -4 | r > 4)
+
+# identify influential points by Cook's distance
+D <- cooks.distance(model_transformed)
+which(D > Dcut)
+
+# identify influential points by DFFITS
+fits <- dffits(model_transformed)
+which(abs(fits) > DFFITScut)
+
+# identify influential points by DFBETAS
+betas <- dfbetas(model_transformed)
+dim(betas)
+
+for(i in 1:9){
+  print(paste0("Beta ", i-1))
+  print(which(abs(betas[,i]) > DFBETAcut))
+}
+
+```
+
+```{r echo=F, message=F}
+# Test for AIC and BIC score
+model.ab = function(model, n)
+{
+  SSres <- sum(model$residuals^2)
+  Rsq <- summary(model)$r.squared
+  Rsq_adj <- summary(model)$adj.r.squared
+  p <- length(model$coefficients) - 1
+  AIC <- n*log(SSres/n) + 2*p   
+  AICc <- AIC + (2*(p+2)*(p+3)/(n-p-1))
+  BIC <- n*log(SSres/n) + (p+2)*log(n)  
+  res <- c(SSres, Rsq, Rsq_adj, AIC, AICc, BIC)
+  names(res) <- c("SSres", "Rsq", "Rsq_adj", "AIC", "AIC_c", "BIC")
+  return(res)
+}
+model_1ab <- model.ab(model_1, 1667)
+model_rab <- model.ab(model_reduced, 1667)
+model_tab <- model.ab(model_transformed, 1667)
+```
+Model | Adjusted $R^2$ | AIC | BIC 
+------|----------------|-----|-----
+Original Model | `r model_1ab[3]` | `r model_1ab[4]` | `r model_1ab[6]`
+Reduced Model | `r model_rab[3]` | `r model_rab[4]` | `r model_rab[6]`
+Final Model(Transformed) | `r model_tab[3]` | `r model_tab[4]` | `r model_tab[6]`
+
+Table: The Adjusted $R^2$, AIC and BIC score of the three models in our study.
+
+# Results
+
+With the final model we have decided on, we ended up with variables of the following: Log(Age), SquareRoot(HoursPerWeek), SquareRoot(TotalHours), APM, UniqueHotkeys, NumberOfPACs, GapBetweenPACs, ActionLatency, and predicting for the response variable LeagueIndex, this is reduced from the previous ten predictors and transforming some of the predictors that are have either distribution problem or violate assumptions. Furthermore, in comparing the two split data sets, we found out that the test data set has a lower mean VIF value. This lower score means that the multicollinearity between the predictor variables in that data set is more correlated than the train data set we initially used to construct our model.[Table 3]
+```{r, echo=F, eval=T}
+# fit in the train dataset
+p <- length(coef(model_transformed))-1
+n <- nrow(train)
+vif <- mean(vif(model_transformed))
+D <- length(which(cooks.distance(model_transformed) > qf(0.5, p+1, n-p-1)))
+dbeta <- length(which(abs(dfbetas(model_transformed)) > 2*sqrt((p+1)/n)))
+
+coefs <- round(summary(model_transformed)$coefficients[,1], 3)
+ses <- round(summary(model_transformed)$coefficients[,2], 3)
+
+# fit in test dataset
+model_transformedtest <- lm(LeagueIndex ~ logAge + sqrtHoursPerWeek + sqrtTotalHours + APM + UniqueHotkeys + NumberOfPACs
+                + GapBetweenPACs + ActionLatency,data=test)
+
+tp <- length(coef(model_transformedtest))-1
+tn <- nrow(test)
+tvif <- mean(vif(model_transformedtest))
+tD <- length(which(cooks.distance(model_transformedtest) > qf(0.5, tp+1, tn-tp-1)))
+tdbeta <- length(which(abs(dfbetas(model_transformedtest)) > 2*sqrt((tp+1)/tn)))
+
+tcoefs <- round(summary(model_transformedtest)$coefficients[,1], 3)
+tses <- round(summary(model_transformedtest)$coefficients[,2], 3)
+
+```
+
+Characteristic | TransformedModel (Train) | TranformedModel (Test) 
+---------------|----------------|---------------
+Mean VIF value | `r vif` | `r tvif` 
+\# Cook's Distance | `r D` | `r tD` 
+\# DFBETAS | `r dbeta` | `r tdbeta`
+Violations | none | none 
+---------------|----------------|---------------
+Intercept | `r coefs[1]` $\pm$ `r ses[1]` (\*) | `r tcoefs[1]` $\pm$ `r tses[1]` (\*)
+Log(Age)  | `r coefs[7]` $\pm$ `r ses[7]` (\*) |`r tcoefs[7]` $\pm$ `r tses[7]` (\*)
+SquareRoot(HoursPerWeek)  | `r coefs[8]` $\pm$ `r ses[8]` (\*)|`r tcoefs[8]` $\pm$ `r tses[8]` (\*)
+SquareRoot(TotalHours) | `r coefs[9]` $\pm$ `r ses[9]` (\*) | `r tcoefs[9]` $\pm$ `r tses[9]`(\*)
+APM | `r coefs[2]` $\pm$ `r ses[2]` (\*) | `r tcoefs[2]` $\pm$ `r tses[2]` (\*)
+UniqueHotKeys | `r coefs[3]` $\pm$ `r ses[3]` (\*) | `r tcoefs[3]` $\pm$ `r tses[3]` (\*)
+NumberOfPACs | `r coefs[4]` $\pm$ `r ses[4]` (\*) | `r tcoefs[4]` $\pm$ `r tses[4]` (\*)
+GapBetweenPACs | `r coefs[5]` $\pm$ `r ses[5]` (\*) | `r tcoefs[5]` $\pm$ `r tses[5]` (\*)
+ActionLatency | `r coefs[6]` $\pm$ `r ses[6]` (\*) | `r tcoefs[6]` $\pm$ `r tses[6]` (\*)
+
+Table: Summary of characteristics of the final transformed model in the training and test datasets. The model uses Log(Age), SquareRoot(HoursPerWeek), SquareRoot(TotalHours), APM, UniqueHotkeys, NumberOfPACs, GapBetweenPACs, ActionLatency. Response is LeagueIndex. Coefficients are presented as estimate $\pm$ SE (\* = significant t-test at $\alpha = 0.05$).
+
+# Discussion
+This study, like many others, has several limitations, the first being data collection. Although match records and server data can help validate the accuracy of metadata. Self-reported variables like hours played and age. We are unsure whether the players reported these variables honestly, which is one of the big reasons we had to go through the transformation for said variables in constructing the model. On the other hand, a major hidden confounding factor is that we do not know the gender of the players. Thus, we can not predict whether or not it affects the model's accuracy. The other limitation is the range of prediction this model can provide. In the data collection section, we mentioned that we removed professional-level players' data from the data set due to unrecorded play time and their almost inhuman reflex data in other variables. This is a double-edged sword as it will help with the overall accuracy of the model but limits the ability to predict talented players who have the potential to become professional players, as there is no standard for the model to predict. The following limitation comes with the identified leverage points, as mentioned previously, due to how the data is collected. Some leverage points in variables such as APM are actual data, as they are recorded by computer programs based on interactions with the game. Thus we are not supposed to remove them from the data set as they are not error data. 
+
+In light of this study, we want to draw more attention to video games as a field of research in statistics. In today's world, the amount of data generated through computer interactions is uncountable, and video games make up a large chunk of this data. With the variety of types of games and the degree of realism they can simulate. Researchers can find the data they need without needing to simulate them. These data may produce more interesting results compared to real-world counterparts. They can be easily recorded and leveraged to analyze them into trends to help us improve in fields such as cognitive science, economy, and artificial intelligence.
+
+# References
+
+1. Vinyals, O., Babuschkin, I., Czarnecki, W.M. et al. Grandmaster level in StarCraft II using multi-agent reinforcement learning. Nature 575, 350–354 (2019). https://doi.org/10.1038/s41586-019-1724-z
+
+2. Thompson JJ, Blair MR, Chen L, Henrey AJ. Video Game Telemetry as a Critical Tool in the Study of Complex Skill Learning. PLoS ONE 8(9): e75129 (2013). https://doi.org/10.1371/journal.pone.0075129
+
+3. UCI Machine Learning Repository : https://archive.ics.uci.edu/ml/index.php
+
+# Appendix
+```{r echo=F,fig.height=5, fig.width=8, fig.cap="Histograms for assessing distribution of the variables"}
+# Check for distribution
+par(mfrow=c(3,4))
+hist(train$LeagueIndex, xlab="LeagueIndex", main="")
+hist(train$Age, xlab="Age", main="")
+hist(train$HoursPerWeek, xlab="HoursPerWeek", main="")
+hist(train$TotalHours, xlab="TotalHours", main="")
+hist(train$APM, xlab="APM", main="")
+hist(train$UniqueHotkeys, xlab="UniqueHotKeys", main="")
+hist(train$NumberOfPACs, xlab="NumberOfPACs", main="")
+hist(train$GapBetweenPACs, xlab="GapBetweenPACs", main="")
+hist(train$ActionLatency, xlab="ActionLatency", main="")
+hist(train$ActionsInPAC, xlab="ActionsInPAC", main="")
+hist(train$UniqueUnitsMade, xlab="UniqueUnitsMade", main="")
+```
+
+
+
+```{r echo=F,fig.height=5, fig.width=8, fig.cap="Histograms for assessing correlation of the transformed variables"}
+pairs(train[,c(5:9,12:14)])
+```
+
+
